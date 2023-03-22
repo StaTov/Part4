@@ -4,13 +4,11 @@ const app = require('../app')
 const helper = require('./test_helper')
 const api = supertest(app)
 const Blog = require('../models/blog')
+const {all} = require("express/lib/application");
 
 beforeEach(async () => {
     await Blog.deleteMany({})
-    let blogObject = new Blog(helper.initialBlogs[0])
-    await blogObject.save()
-    blogObject = new Blog(helper.initialBlogs[1])
-    await blogObject.save()
+    await Blog.insertMany(helper.initialBlogs)
 }, 100000)
 
 test('blogs are returned as json', async () => {
@@ -20,7 +18,7 @@ test('blogs are returned as json', async () => {
         .expect('Content-Type', /application\/json/)
 })
 
-test('there are two blogs', async () => {
+test('all blogs are returned', async () => {
     const response = await api.get('/api/blogs')
     expect(response.body).toHaveLength(helper.initialBlogs.length)
 })
@@ -74,6 +72,33 @@ test('title or url properties are missing status code 400', async () => {
         .send(newBlog)
         .expect(400)
 })
+
+test('remove one blog by id with 204 status', async () => {
+    const allBlogs = await api.get('/api/blogs')
+    const id = allBlogs.body[0].id
+
+    await api
+        .delete(`/api/blogs/${id}`)
+        .expect(204)
+
+    const blogsAfterDelete = await api.get('/api/blogs')
+    expect(blogsAfterDelete.body).toHaveLength(helper.initialBlogs.length - 1)
+
+}, 100000)
+
+test('update likes value', async () => {
+    const allBlogs = await api.get('/api/blogs')
+    oldBlog = allBlogs.body[0]
+
+    const newBlog = {...oldBlog, likes: oldBlog.likes + 1}
+    await api
+        .put(`/api/blogs/${oldBlog.id}`)
+        .send(newBlog)
+
+    const result = await api.get('/api/blogs')
+    expect(newBlog.likes).toBe(result.body[0].likes)
+
+}, 100000)
 afterAll(async () => {
     await mongoose.connection.close()
 })
