@@ -10,6 +10,7 @@ const mongoose = require('mongoose')
 const middleware = require('./utils/middleware')
 const loginRouter = require('./controllers/login')
 
+
 mongoose.set('strictQuery', false)
 
 logger.info('connecting to', config.MONGODB_URL)
