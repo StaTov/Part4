@@ -4,11 +4,17 @@ const app = require('../app')
 const helper = require('./test_helper')
 const api = supertest(app)
 const Blog = require('../models/blog')
+const User = require('../models/user')
 
 
 beforeEach(async () => {
     await Blog.deleteMany({})
     await Blog.insertMany(helper.initialBlogs)
+
+    await User.deleteMany({})
+    await api
+        .post('/api/users')
+        .send(helper.userInfo)
 }, 100000)
 
 describe('When there is initially some blogs saved:', () => {
@@ -26,23 +32,49 @@ describe('When there is initially some blogs saved:', () => {
         const response = await api.get('/api/blogs')
         expect(response.body[0].id).toBeDefined()
     })
-    describe('Addition of a new note:', () => {
+    describe('Addition of a new blog:', () => {
         test('a valid blog can be added with valid property', async () => {
-            const newBlog = {
-                title: "title test",
-                author: "author test",
-                url: "url test",
-                likes: 3
-            }
+
+            const result = await api
+                .post('/api/login')
+                .send(helper.userInfo)
+                .expect(200)
+            const userToken = result.body.token
+
             await api
                 .post('/api/blogs')
-                .send(newBlog)
+                .set('Authorization', `Bearer ${userToken}`)
+                .send(helper.newBlog)
                 .expect(201)
                 .expect('Content-Type', /application\/json/)
 
             const blogsWithNewPost = await helper.blogsInDb()
             expect(blogsWithNewPost).toHaveLength(helper.initialBlogs.length + 1)
-            expect(blogsWithNewPost[2].title).toBe('title test')
+            expect(blogsWithNewPost[2].title).toBe(helper.newBlog.title)
+        })
+        test('can not add blog if a token is not provided.', async () => {
+
+            await api
+                .post('/api/blogs')
+                .send(helper.newBlog)
+                .expect(401)
+                .expect('Content-Type', /application\/json/)
+
+            const blogsAfterAdd = await helper.blogsInDb()
+            expect(blogsAfterAdd).toHaveLength(helper.initialBlogs.length)
+        })
+        test('can not add blog if a token is wrong.', async () => {
+            const wrongToken = 'wroooong'
+
+            await api
+                .post('/api/blogs')
+                .set('Authorization', `Bearer ${wrongToken}`)
+                .send(helper.newBlog)
+                .expect(400)
+                .expect('Content-Type', /application\/json/)
+
+            const blogsAfterAdd = await helper.blogsInDb()
+            expect(blogsAfterAdd).toHaveLength(helper.initialBlogs.length)
         })
     })
     describe('When missing some field:', () => {
@@ -51,10 +83,16 @@ describe('When there is initially some blogs saved:', () => {
                 title: "title test",
                 author: "author test",
                 url: "url test",
-
             }
+            const result = await api
+                .post('/api/login')
+                .send(helper.userInfo)
+                .expect(200)
+            const userToken = result.body.token
+
             await api
                 .post('/api/blogs')
+                .set('Authorization', `Bearer ${userToken}`)
                 .send(newBlog)
                 .expect(201)
                 .expect('Content-Type', /application\/json/)
@@ -62,15 +100,25 @@ describe('When there is initially some blogs saved:', () => {
             expect(blogsWithNewPost[2].likes).toBe(0)
         }, 100000)
 
-        test('title or url properties are missing with status code 400', async () => {
+        test('title and url properties are missing with status code 400', async () => {
             const newBlog = {
                 author: "author test",
                 likes: 0
             }
+            const result = await api
+                .post('/api/login')
+                .send(helper.userInfo)
+                .expect(200)
+            const userToken = result.body.token
+
             api
                 .post('/api/blogs')
+                .set('Authorization', `Bearer ${userToken}`)
                 .send(newBlog)
                 .expect(400)
+
+            const blogsAfterAdd = await helper.blogsInDb()
+            expect(blogsAfterAdd).toHaveLength(helper.initialBlogs.length)
         })
     })
     describe('Update some value:', () => {
@@ -88,17 +136,31 @@ describe('When there is initially some blogs saved:', () => {
 
         }, 100000)
     })
-    describe('Deletion some blog:', () => {
+    describe('Delete some blog:', () => {
         test('remove one blog by id with 204 status', async () => {
-            const allBlogs = await helper.blogsInDb()
-            const id = allBlogs[0].id
+
+            const result = await api
+                .post('/api/login')
+                .send(helper.userInfo)
+                .expect(200)
+
+            const userToken = result.body.token
+
+            const savedBlog = await api
+                .post('/api/blogs')
+                .send(helper.newBlog)
+                .set('Authorization', `Bearer ${userToken}`)
+                .expect(201)
+
+            const id = savedBlog.body.id
 
             await api
                 .delete(`/api/blogs/${id}`)
+                .set('Authorization', `Bearer ${userToken}`)
                 .expect(204)
 
             const blogsAfterDelete = await helper.blogsInDb()
-            expect(blogsAfterDelete).toHaveLength(helper.initialBlogs.length - 1)
+            expect(blogsAfterDelete).toHaveLength(helper.initialBlogs.length)
 
         }, 100000)
     })
@@ -107,4 +169,4 @@ describe('When there is initially some blogs saved:', () => {
 
 afterAll(async () => {
     await mongoose.connection.close()
-})
+}, 100000)

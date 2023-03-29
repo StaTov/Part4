@@ -4,21 +4,19 @@ const User = require('../models/user')
 const {userExtractor} = require('../utils/middleware')
 
 
-
-
 blogsRouter.get('/', async (request, response) => {
     const blogs = await Blog.find({}).populate('user', {username: 1, name: 1})
     response.json(blogs)
 })
 
-blogsRouter.post('/', userExtractor , async (request, response) => {
+blogsRouter.post('/', userExtractor, async (request, response) => {
+
     const body = request.body
     const userId = request.user.id
 
     if (!userId) {
         return response.status(401).json({error: 'token invalid'})
     }
-
     const user = await User.findById(userId)
     const blog = new Blog({...body, user: user.id})
     const savedBlog = await blog.save()
